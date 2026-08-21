@@ -1,0 +1,91 @@
+name: Mother Miner v0.14 Android APK
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mother-miner-ci/v0.14/**'
+      - '.github/workflows/mother-miner-v014-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: bash
+        run: |
+          cat mother-miner-ci/v0.14/part-*.txt | base64 -d > /tmp/MotherMiner_Android_v0.14_CI.zip
+          unzip -t /tmp/MotherMiner_Android_v0.14_CI.zip
+          rm -rf /tmp/mm && mkdir -p /tmp/mm
+          unzip -q /tmp/MotherMiner_Android_v0.14_CI.zip -d /tmp/mm
+          test -f /tmp/mm/MotherMinerAndroid/app/build.gradle
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35 toolchain
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run pure Java core vectors
+        working-directory: /tmp/mm/MotherMinerAndroid
+        shell: bash
+        run: |
+          rm -rf /tmp/mmcore && mkdir -p /tmp/mmcore
+          javac -d /tmp/mmcore \
+            app/src/main/java/company/taowind/motherminer/Hex.java \
+            app/src/main/java/company/taowind/motherminer/Sha256dStratumCore.java \
+            app/src/main/java/company/taowind/motherminer/StratumJob.java \
+            core-test/StratumKnownVectorTest.java \
+            core-test/FastTargetCompareTest.java
+          java -cp /tmp/mmcore company.taowind.motherminer.StratumKnownVectorTest
+          java -cp /tmp/mmcore company.taowind.motherminer.FastTargetCompareTest
+
+      - name: Build debug APK
+        working-directory: /tmp/mm/MotherMinerAndroid
+        shell: bash
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK package, version and signature
+        shell: bash
+        run: |
+          APK='/tmp/mm/MotherMinerAndroid/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/badging.txt
+          grep -q "package: name='company.taowind.motherminer'" /tmp/badging.txt
+          grep -q "versionName='0.14.0-beta'" /tmp/badging.txt
+          cp "$APK" MotherMiner_Full_v0.14_Android_debug.apk
+          sha256sum MotherMiner_Full_v0.14_Android_debug.apk > MotherMiner_v0.14_Android_APK.sha256
+          cp /tmp/signature.txt MotherMiner_v0.14_Android_SIGNATURE.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MotherMiner-v0.14-Android-debug
+          path: |
+            MotherMiner_Full_v0.14_Android_debug.apk
+            MotherMiner_v0.14_Android_APK.sha256
+            MotherMiner_v0.14_Android_SIGNATURE.txt
+          if-no-files-found: error
+          retention-days: 14
