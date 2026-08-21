@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'mother-miner-ci/v0.14/**'
+      - 'MotherMiner_Android_v0.14_CI.zip'
       - '.github/workflows/mother-miner-v014-apk.yml'
 
 permissions:
@@ -18,13 +18,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct source archive
+      - name: Expand source archive
         shell: bash
         run: |
-          cat mother-miner-ci/v0.14/part-*.txt | base64 -d > /tmp/MotherMiner_Android_v0.14_CI.zip
-          unzip -t /tmp/MotherMiner_Android_v0.14_CI.zip
+          unzip -t MotherMiner_Android_v0.14_CI.zip
           rm -rf /tmp/mm && mkdir -p /tmp/mm
-          unzip -q /tmp/MotherMiner_Android_v0.14_CI.zip -d /tmp/mm
+          unzip -q MotherMiner_Android_v0.14_CI.zip -d /tmp/mm
           test -f /tmp/mm/MotherMinerAndroid/app/build.gradle
 
       - name: Set up JDK 17
